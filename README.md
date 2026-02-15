@@ -61,3 +61,15 @@ curl -X POST http://localhost:3000/auth/register \
 # 2. Gunakan id yang dikembalikan
 curl http://localhost:3000/user/profile -H "x-user-id: <uuid>"
 ```
+
+## Testing
+
+```bash
+bun test
+```
+
+## Phase 2: Conflict & Alternatives
+
+When `POST /schedules` or `PATCH /schedules/:id` detects a conflict, the 409 response includes:
+
+- `alternativeSlots`: Suggested time slots that fit (with buffer respected)

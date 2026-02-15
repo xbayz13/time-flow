@@ -3,6 +3,7 @@ import { db } from "../../../db";
 import { activities } from "../../../db/schema";
 import type { Activity, NewActivity } from "../../../db/schema";
 import { ConflictManager } from "../../utils/ConflictManager";
+import { AlternativeSlotFinder } from "../../utils/AlternativeSlotFinder";
 
 export abstract class ScheduleService {
   static async getByDate(userId: string, date: string): Promise<Activity[]> {
@@ -57,6 +58,30 @@ export abstract class ScheduleService {
       .where(and(eq(activities.id, id), eq(activities.userId, userId)));
 
     return (result.rowCount ?? 0) > 0;
+  }
+
+  static findAlternativeSlots(
+    existing: Activity[],
+    requiredDurationMinutes: number,
+    bufferMinutes: number,
+    date: string
+  ) {
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+
+    const slots = existing.map((a) => ({
+      startTime: new Date(a.startTime),
+      endTime: new Date(a.endTime),
+      isFixed: a.isFixed,
+    }));
+
+    return AlternativeSlotFinder.find(
+      slots,
+      requiredDurationMinutes,
+      bufferMinutes,
+      dayStart,
+      dayEnd
+    );
   }
 
   static checkConflict(

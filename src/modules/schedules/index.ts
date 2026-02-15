@@ -55,6 +55,16 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
       );
 
       if (conflict.hasConflict) {
+        const durationMinutes = Math.round(
+          (endTime.getTime() - startTime.getTime()) / (60 * 1000)
+        );
+        const alternativeSlots = ScheduleService.findAlternativeSlots(
+          existing,
+          durationMinutes,
+          user.bufferMinutes,
+          dateStr
+        );
+
         set.status = 409;
         return {
           error: "Schedule conflict detected",
@@ -65,6 +75,7 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
             endTime: c.endTime,
             isFixed: c.isFixed,
           })),
+          alternativeSlots,
         };
       }
 
@@ -135,6 +146,16 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
       );
 
       if (conflict.hasConflict) {
+        const durationMinutes = Math.round(
+          (endTime.getTime() - startTime.getTime()) / (60 * 1000)
+        );
+        const alternativeSlots = ScheduleService.findAlternativeSlots(
+          allExisting,
+          durationMinutes,
+          user.bufferMinutes,
+          dateStr
+        );
+
         set.status = 409;
         return {
           error: "Schedule conflict detected",
@@ -145,6 +166,7 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
             endTime: c.endTime,
             isFixed: c.isFixed,
           })),
+          alternativeSlots,
         };
       }
 
