@@ -4,6 +4,8 @@ import { AIService } from "./service";
 import { aiModels } from "./model";
 import { ScheduleService } from "../schedules/service";
 import { ConflictManager } from "../../utils/ConflictManager";
+import { AuditService } from "../../utils/AuditService";
+import { checkAIRateLimit } from "../../utils/RateLimiter";
 
 export const aiModule = new Elysia({ prefix: "/ai" })
   .use(authPlugin)
@@ -11,6 +13,20 @@ export const aiModule = new Elysia({ prefix: "/ai" })
   .post(
     "/prompt",
     async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const limit = checkAIRateLimit(user.id, 10, 60_000);
+      if (!limit.ok) {
+        set.status = 429;
+        return {
+          error: "AI rate limit exceeded",
+          message: "Max 10 AI requests per minute. Try again later.",
+          retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000),
+        };
+      }
+
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         set.status = 500;
@@ -154,6 +170,16 @@ export const aiModule = new Elysia({ prefix: "/ai" })
           aiReasoning: act.aiReasoning ?? null,
         });
 
+        await AuditService.logCreate(user.id, c.id, "AI", {
+          title: c.title,
+          isFixed: c.isFixed,
+          startTime: c.startTime.toISOString(),
+          endTime: c.endTime.toISOString(),
+          priority: c.priority,
+          category: c.category,
+          aiReasoning: c.aiReasoning,
+        });
+
         created.push({
           id: c.id,
           title: c.title,
@@ -173,6 +199,20 @@ export const aiModule = new Elysia({ prefix: "/ai" })
   .post(
     "/optimize",
     async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      const limit = checkAIRateLimit(user.id, 10, 60_000);
+      if (!limit.ok) {
+        set.status = 429;
+        return {
+          error: "AI rate limit exceeded",
+          message: "Max 10 AI requests per minute. Try again later.",
+          retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000),
+        };
+      }
+
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         set.status = 500;

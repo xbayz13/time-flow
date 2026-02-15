@@ -204,4 +204,94 @@ describe("AI Module Integration (Phase 3)", () => {
     expect(data.created[0].title).toBe("Meeting dari AI");
     expect(data.created[0].id).toBeDefined();
   });
+
+  it("Phase 5: audit trail - AI confirm creates audit log", async () => {
+    if (!dbAvailable) return;
+    const confirmRes = await app.handle(
+      new Request("http://localhost/ai/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          activities: [
+            {
+              title: "Audit Test AI",
+              startTime: "2026-02-19T14:00:00.000Z",
+              endTime: "2026-02-19T15:00:00.000Z",
+              isFixed: true,
+              category: "admin",
+              priority: 3,
+            },
+          ],
+        }),
+      })
+    );
+    expect(confirmRes.status).toBe(200);
+
+    const auditRes = await app.handle(
+      new Request("http://localhost/schedules/audit", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+    expect(auditRes.status).toBe(200);
+    const auditData = (await auditRes.json()) as { auditLogs: Array<{ action: string; source: string; payloadAfter: { title: string } | null }> };
+    const aiCreateLog = auditData.auditLogs.find(
+      (l) => l.action === "CREATE" && l.source === "AI" && l.payloadAfter?.title === "Audit Test AI"
+    );
+    expect(aiCreateLog).toBeDefined();
+    expect(aiCreateLog!.payloadAfter).toMatchObject({ title: "Audit Test AI", isFixed: true });
+  });
+
+  it("Phase 5: audit trail - USER create/delete creates audit log", async () => {
+    if (!dbAvailable) return;
+    const createRes = await app.handle(
+      new Request("http://localhost/schedules", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: "Manual Schedule Audit",
+          startTime: "2026-02-20T10:00:00.000Z",
+          endTime: "2026-02-20T11:00:00.000Z",
+          isFixed: false,
+        }),
+      })
+    );
+    expect(createRes.status).toBe(200);
+    const createData = (await createRes.json()) as { id: string };
+
+    const auditAfterCreate = await app.handle(
+      new Request("http://localhost/schedules/audit", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+    const auditCreate = (await auditAfterCreate.json()) as { auditLogs: Array<{ action: string; source: string; payloadAfter: { title: string } | null }> };
+    const userCreateLog = auditCreate.auditLogs.find(
+      (l) => l.action === "CREATE" && l.source === "USER" && l.payloadAfter?.title === "Manual Schedule Audit"
+    );
+    expect(userCreateLog).toBeDefined();
+
+    const deleteRes = await app.handle(
+      new Request(`http://localhost/schedules/${createData.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+    expect(deleteRes.status).toBe(200);
+
+    const auditAfterDelete = await app.handle(
+      new Request("http://localhost/schedules/audit", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    );
+    const auditDelete = (await auditAfterDelete.json()) as { auditLogs: Array<{ action: string; source: string; payloadBefore: { title: string } | null }> };
+    const userDeleteLog = auditDelete.auditLogs.find(
+      (l) => l.action === "DELETE" && l.source === "USER" && l.payloadBefore?.title === "Manual Schedule Audit"
+    );
+    expect(userDeleteLog).toBeDefined();
+  });
 });

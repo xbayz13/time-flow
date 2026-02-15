@@ -52,6 +52,26 @@ export const activitiesRelations = relations(activities, ({ one }) => ({
   user: one(users),
 }));
 
+/** Audit trail: log perubahan aktivitas (AI vs User) untuk fitur undo */
+export const auditSource = ["AI", "USER"] as const;
+
+export const activityAuditLogs = pgTable("activity_audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  activityId: uuid("activity_id"), // nullable: untuk DELETE activity sudah terhapus
+  action: varchar("action", { length: 10 }).notNull(), // CREATE, UPDATE, DELETE
+  source: varchar("source", { length: 10 }).$type<(typeof auditSource)[number]>().notNull(), // AI | USER
+  payloadBefore: text("payload_before"), // JSON snapshot before change
+  payloadAfter: text("payload_after"), // JSON snapshot after change
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const activityAuditLogsRelations = relations(activityAuditLogs, ({ one }) => ({
+  user: one(users),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Activity = typeof activities.$inferSelect;

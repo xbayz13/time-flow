@@ -37,6 +37,18 @@ bun run dev
 
 Server berjalan di http://localhost:3000
 
+
+```bash
+# Build dan jalankan dengan PostgreSQL
+docker compose up -d
+
+# App: http://localhost:3000
+# DB: localhost:5432 (user: postgres, pass: postgres, db: timeflow)
+
+# Atur env di .env atau export:
+# JWT_SECRET=... OPENAI_API_KEY=...
+```
+
 ## API
 
 | Method | Endpoint | Deskripsi |
@@ -47,9 +59,11 @@ Server berjalan di http://localhost:3000
 | GET | `/user/profile` | Profil user *(auth)* |
 | PATCH | `/user/settings` | Update buffer, timezone *(auth)* |
 | GET | `/schedules?date=YYYY-MM-DD&analyze=true` | List jadwal (+ burnout/triage jika analyze=true) *(auth)* |
+| GET | `/schedules/audit?limit=50` | Audit log perubahan (AI vs USER) untuk undo *(auth)* |
 | POST | `/schedules` | Tambah jadwal *(auth)* |
 | PATCH | `/schedules/:id` | Update jadwal *(auth)* |
 | DELETE | `/schedules/:id` | Hapus jadwal *(auth)* |
+| GET | `/openapi` | Dokumentasi API (Scalar UI) |
 
 ### Auth (JWT)
 
@@ -73,16 +87,3 @@ curl http://localhost:3000/user/profile -H "Authorization: Bearer <token>"
 ```bash
 bun test
 ```
-
-**Phase 3 tests:** Unit tests (schema, system prompt) + integration tests (auth guards, /ai/prompt, /ai/confirm).
-
-**Phase 4 tests:** BurnoutDetector, TriageAnalyzer.
-
-Integration tests require DB — they skip if DB is unavailable.
-
-## Phase 4: Optimization & Mental Health
-
-- **Burnout Detection:** Deteksi >3 jam kerja berturut-turut tanpa jeda, saran "Rest Block"
-- **Triage Protocol:** Deteksi hari overload, saran pindah tugas prioritas rendah ke esok
-- **GET /schedules?analyze=true:** Mengembalikan `burnoutWarnings` dan `triage`
-- **Dynamic Buffer:** AI dapat kurangi buffer (min 5 menit) untuk menyelamatkan jadwal

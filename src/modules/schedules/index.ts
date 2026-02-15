@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { ScheduleService } from "./service";
 import { scheduleModels } from "./model";
 import { authPlugin } from "../auth";
+import { AuditService } from "../../utils/AuditService";
 
 export const scheduleModule = new Elysia({ prefix: "/schedules" })
   .use(authPlugin)
@@ -44,6 +45,17 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
         date: t.Optional(t.String()),
         analyze: t.Optional(t.String()),
       }),
+    }
+  )
+  .get(
+    "/audit",
+    async ({ user, query }) => {
+      const limit = Math.min(Number(query.limit) || 50, 100);
+      const logs = await AuditService.getByUser(user.id, limit);
+      return { auditLogs: logs };
+    },
+    {
+      query: t.Object({ limit: t.Optional(t.String()) }),
     }
   )
   .post(
@@ -103,6 +115,15 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
         endTime,
         priority: body.priority ?? 3,
         category: body.category ?? "admin",
+      });
+
+      await AuditService.logCreate(user.id, created.id, "USER", {
+        title: created.title,
+        isFixed: created.isFixed,
+        startTime: created.startTime.toISOString(),
+        endTime: created.endTime.toISOString(),
+        priority: created.priority,
+        category: created.category,
       });
 
       return {
@@ -192,6 +213,28 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
         updates as Parameters<typeof ScheduleService.update>[2]
       );
 
+      await AuditService.logUpdate(
+        user.id,
+        params.id,
+        "USER",
+        {
+          title: existing.title,
+          isFixed: existing.isFixed,
+          startTime: existing.startTime.toISOString(),
+          endTime: existing.endTime.toISOString(),
+          priority: existing.priority,
+          category: existing.category,
+        },
+        {
+          title: updated!.title,
+          isFixed: updated!.isFixed,
+          startTime: updated!.startTime.toISOString(),
+          endTime: updated!.endTime.toISOString(),
+          priority: updated!.priority,
+          category: updated!.category,
+        }
+      );
+
       return {
         id: updated!.id,
         title: updated!.title,
@@ -210,11 +253,24 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
   .delete(
     "/:id",
     async ({ user, params, set }) => {
+      const existing = await ScheduleService.getById(params.id, user.id);
+      if (!existing) {
+        set.status = 404;
+        return { error: "Schedule not found" };
+      }
       const deleted = await ScheduleService.delete(params.id, user.id);
       if (!deleted) {
         set.status = 404;
         return { error: "Schedule not found" };
       }
+      await AuditService.logDelete(user.id, params.id, "USER", {
+        title: existing.title,
+        isFixed: existing.isFixed,
+        startTime: existing.startTime.toISOString(),
+        endTime: existing.endTime.toISOString(),
+        priority: existing.priority,
+        category: existing.category,
+      });
       return { success: true };
     },
     {
