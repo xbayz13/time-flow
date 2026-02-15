@@ -66,6 +66,11 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         bufferMinutes: t.Optional(t.Number({ minimum: 5, maximum: 45 })),
         timezone: t.Optional(t.String()),
       }),
+      detail: {
+        summary: "Register new user",
+        description: "Create a new account. Returns JWT token for API authentication.",
+        tags: ["Auth"],
+      },
     }
   )
   .post(
@@ -110,6 +115,11 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         email: t.String({ format: "email" }),
         password: t.String(),
       }),
+      detail: {
+        summary: "Sign in",
+        description: "Authenticate and get JWT token. Use Bearer token for protected endpoints.",
+        tags: ["Auth"],
+      },
     }
   );
 

@@ -4,7 +4,13 @@ import { scheduleModels } from "./model";
 import { authPlugin } from "../auth";
 import { AuditService } from "../../utils/AuditService";
 
-export const scheduleModule = new Elysia({ prefix: "/schedules" })
+export const scheduleModule = new Elysia({
+  prefix: "/schedules",
+  detail: {
+    tags: ["Schedules"],
+    security: [{ bearerAuth: [] }],
+  },
+})
   .use(authPlugin)
   .model(scheduleModels)
   .get(
@@ -45,6 +51,11 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
         date: t.Optional(t.String()),
         analyze: t.Optional(t.String()),
       }),
+      detail: {
+        summary: "List schedules",
+        description:
+          "Get schedules for a date. Use ?analyze=true for burnout warnings and triage suggestions.",
+      },
     }
   )
   .get(
@@ -56,6 +67,10 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
     },
     {
       query: t.Object({ limit: t.Optional(t.String()) }),
+      detail: {
+        summary: "Audit log",
+        description: "Get audit trail of schedule changes. Use ?limit=N (max 100).",
+      },
     }
   )
   .post(
@@ -138,6 +153,11 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
     },
     {
       body: "createBody",
+      detail: {
+        summary: "Create schedule",
+        description:
+          "Create a new schedule. Returns 409 with alternative slots if conflict detected.",
+      },
     }
   )
   .patch(
@@ -248,6 +268,11 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
     {
       params: t.Object({ id: t.String() }),
       body: "updateBody",
+      detail: {
+        summary: "Update schedule",
+        description:
+          "Update a schedule by ID. Returns 409 if conflict detected.",
+      },
     }
   )
   .delete(
@@ -275,5 +300,9 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
     },
     {
       params: t.Object({ id: t.String() }),
+      detail: {
+        summary: "Delete schedule",
+        description: "Delete a schedule by ID.",
+      },
     }
   );

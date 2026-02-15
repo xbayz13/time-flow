@@ -3,10 +3,18 @@ import { UserService } from "./service";
 import { userModels } from "./model";
 import { authPlugin } from "../auth";
 
-export const userModule = new Elysia({ prefix: "/user" })
+export const userModule = new Elysia({
+  prefix: "/user",
+  detail: {
+    tags: ["User"],
+    security: [{ bearerAuth: [] }],
+  },
+})
   .use(authPlugin)
   .model(userModels)
-  .get("/profile", async ({ user }) => {
+  .get(
+    "/profile",
+    async ({ user }) => {
     const profile = await UserService.getById(user.id);
     if (!profile) {
       return new Response(
@@ -21,7 +29,14 @@ export const userModule = new Elysia({ prefix: "/user" })
       timezone: profile.timezone,
       sleepStart: profile.sleepStart,
     };
-  })
+  },
+  {
+    detail: {
+      summary: "Get profile",
+      description: "Returns the authenticated user's profile and settings.",
+    },
+  }
+)
   .patch(
     "/settings",
     async ({ user, body }) => {
@@ -40,5 +55,9 @@ export const userModule = new Elysia({ prefix: "/user" })
     },
     {
       body: "settingsBody",
+      detail: {
+        summary: "Update settings",
+        description: "Update buffer minutes, timezone, and sleep start time.",
+      },
     }
   );

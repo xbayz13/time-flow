@@ -15,7 +15,7 @@ bun run db:push
 bun run dev
 ```
 
-→ http://localhost:3000 | Docs: http://localhost:3000/openapi
+→ http://localhost:3000 | Docs: http://localhost:3000/docs
 
 ---
 
@@ -52,7 +52,7 @@ docker compose up -d
 | `POST /ai/optimize` | Optimasi jadwal harian *(auth)* |
 | `POST /ai/confirm` | Simpan draft AI ke DB *(auth)* |
 
-Dokumentasi lengkap: **GET /openapi**
+Dokumentasi lengkap: **GET /docs**
 
 ---
 

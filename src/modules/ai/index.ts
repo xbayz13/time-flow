@@ -7,7 +7,13 @@ import { ConflictManager } from "../../utils/ConflictManager";
 import { AuditService } from "../../utils/AuditService";
 import { checkAIRateLimit } from "../../utils/RateLimiter";
 
-export const aiModule = new Elysia({ prefix: "/ai" })
+export const aiModule = new Elysia({
+  prefix: "/ai",
+  detail: {
+    tags: ["AI"],
+    security: [{ bearerAuth: [] }],
+  },
+})
   .use(authPlugin)
   .model(aiModels)
   .post(
@@ -115,7 +121,14 @@ export const aiModule = new Elysia({ prefix: "/ai" })
         };
       }
     },
-    { body: "promptBody" }
+    {
+      body: "promptBody",
+      detail: {
+        summary: "AI prompt",
+        description:
+          "Send natural language prompt to create/arrange schedules. Rate limit: 10 req/min.",
+      },
+    }
   )
   .post(
     "/confirm",
@@ -194,7 +207,14 @@ export const aiModule = new Elysia({ prefix: "/ai" })
         created,
       };
     },
-    { body: "confirmBody" }
+    {
+      body: "confirmBody",
+      detail: {
+        summary: "Confirm AI proposal",
+        description:
+          "Confirm and persist AI-generated activities. Use after /ai/prompt returns PENDING_CONFIRMATION.",
+      },
+    }
   )
   .post(
     "/optimize",
@@ -266,5 +286,12 @@ export const aiModule = new Elysia({ prefix: "/ai" })
         };
       }
     },
-    { body: t.Object({ date: t.Optional(t.String()) }) }
+    {
+      body: t.Object({ date: t.Optional(t.String()) }),
+      detail: {
+        summary: "Optimize schedule",
+        description:
+          "AI optimizes schedule for the given date. Rearranges non-fixed activities, adds rest blocks if needed. Rate limit: 10 req/min.",
+      },
+    }
   );
