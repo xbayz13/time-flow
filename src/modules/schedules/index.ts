@@ -44,7 +44,7 @@ export const scheduleModule = new Elysia({
         };
       }
 
-      return result;
+      return { schedules: result };
     },
     {
       query: t.Object({
@@ -54,7 +54,7 @@ export const scheduleModule = new Elysia({
       detail: {
         summary: "List schedules",
         description:
-          "Get schedules for a date. Use ?analyze=true for burnout warnings and triage suggestions.",
+          "Get schedules for a date. Always returns { schedules: [...] }. Use ?analyze=true for burnout warnings and triage.",
       },
     }
   )

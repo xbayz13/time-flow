@@ -5,6 +5,14 @@ import { users } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-min-32-characters-long";
+if (
+  !process.env.JWT_SECRET &&
+  (process.env.NODE_ENV === "production" || process.env.BUN_ENV === "production")
+) {
+  console.warn(
+    "⚠️  JWT_SECRET not set in production. Using fallback is UNSAFE. Set JWT_SECRET in environment."
+  );
+}
 
 /**
  * Public auth routes: register, sign-in

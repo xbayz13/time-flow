@@ -17,12 +17,16 @@ export abstract class UserService {
       sleepStart?: string;
     }
   ): Promise<User | undefined> {
+    const updates: Partial<{ bufferMinutes: number; timezone: string; sleepStart: string; updatedAt: Date }> = {
+      updatedAt: new Date(),
+    };
+    if (data.bufferMinutes !== undefined) updates.bufferMinutes = data.bufferMinutes;
+    if (data.timezone !== undefined) updates.timezone = data.timezone;
+    if (data.sleepStart !== undefined) updates.sleepStart = data.sleepStart;
+
     const [updated] = await db
       .update(users)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
+      .set(updates)
       .where(eq(users.id, userId))
       .returning();
 

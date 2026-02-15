@@ -147,8 +147,14 @@ export const aiModule = new Elysia({
       }> = [];
 
       for (const act of body.activities) {
-        const startTime = new Date(act.startTime);
-        const endTime = new Date(act.endTime);
+        const startTimeStr = act.startTime ?? act.start;
+        const endTimeStr = act.endTime ?? act.end;
+        if (!startTimeStr || !endTimeStr) {
+          set.status = 400;
+          return { error: "Each activity must have startTime/start and endTime/end" };
+        }
+        const startTime = new Date(startTimeStr);
+        const endTime = new Date(endTimeStr);
 
         const dateStr = startTime.toISOString().slice(0, 10);
         const existing = await ScheduleService.getByDate(user.id, dateStr);

@@ -31,8 +31,24 @@ export abstract class AuditService {
       activityId: r.activityId,
       action: r.action,
       source: r.source,
-      payloadBefore: r.payloadBefore ? (JSON.parse(r.payloadBefore) as Record<string, unknown>) : null,
-      payloadAfter: r.payloadAfter ? (JSON.parse(r.payloadAfter) as Record<string, unknown>) : null,
+      payloadBefore: r.payloadBefore
+        ? (() => {
+            try {
+              return JSON.parse(r.payloadBefore) as Record<string, unknown>;
+            } catch {
+              return null;
+            }
+          })()
+        : null,
+      payloadAfter: r.payloadAfter
+        ? (() => {
+            try {
+              return JSON.parse(r.payloadAfter) as Record<string, unknown>;
+            } catch {
+              return null;
+            }
+          })()
+        : null,
       createdAt: r.createdAt,
     }));
   }
