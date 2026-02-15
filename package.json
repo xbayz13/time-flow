@@ -10,10 +10,14 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.29",
+    "@elysiajs/jwt": "^1.4.0",
+    "ai": "^6.0.86",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
     "elysia": "latest",
-    "postgres": "^3.4.8"
+    "postgres": "^3.4.8",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "bun-types": "latest",

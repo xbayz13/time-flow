@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { authPublic } from "./modules/auth";
 import { userModule } from "./modules/user";
 import { scheduleModule } from "./modules/schedules";
+import { aiModule } from "./modules/ai";
 
 const app = new Elysia()
   .get("/", () => ({
@@ -10,12 +11,14 @@ const app = new Elysia()
     docs: {
       user: "GET/PATCH /user/profile, /user/settings",
       schedules: "GET/POST/PATCH/DELETE /schedules",
-      auth: "POST /auth/register (dev)",
+      ai: "POST /ai/prompt, /ai/optimize, /ai/confirm",
+      auth: "POST /auth/register, /auth/sign-in (JWT)",
     },
   }))
   .use(authPublic)
   .use(userModule)
   .use(scheduleModule)
+  .use(aiModule)
   .listen(3000);
 
 console.log(

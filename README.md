@@ -20,8 +20,10 @@ Pastikan PostgreSQL berjalan, lalu:
 # Copy env example
 cp .env.example .env
 
-# Edit .env dengan connection string PostgreSQL Anda
+# Edit .env:
 # DATABASE_URL=postgres://user:pass@localhost:5432/timeflow
+# OPENAI_API_KEY=... (untuk AI)
+# JWT_SECRET=... (min 32 karakter, untuk auth)
 
 # Push schema ke database
 bun run db:push
@@ -40,7 +42,8 @@ Server berjalan di http://localhost:3000
 | Method | Endpoint | Deskripsi |
 |--------|----------|-----------|
 | GET | `/` | Info API |
-| POST | `/auth/register` | Daftar user (dev) |
+| POST | `/auth/register` | Daftar user (email + password) |
+| POST | `/auth/sign-in` | Login, dapat JWT token |
 | GET | `/user/profile` | Profil user *(auth)* |
 | PATCH | `/user/settings` | Update buffer, timezone *(auth)* |
 | GET | `/schedules?date=YYYY-MM-DD` | List jadwal *(auth)* |
@@ -48,18 +51,21 @@ Server berjalan di http://localhost:3000
 | PATCH | `/schedules/:id` | Update jadwal *(auth)* |
 | DELETE | `/schedules/:id` | Hapus jadwal *(auth)* |
 
-### Auth (Phase 1)
-
-Gunakan header `x-user-id: <uuid>` dengan UUID user dari `/auth/register`.
+### Auth (JWT)
 
 ```bash
-# 1. Daftar user
+# 1. Register (dengan password)
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com"}'
+  -d '{"email":"user@example.com","password":"secret123"}'
 
-# 2. Gunakan id yang dikembalikan
-curl http://localhost:3000/user/profile -H "x-user-id: <uuid>"
+# 2. Sign in
+curl -X POST http://localhost:3000/auth/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}'
+
+# 3. Gunakan token di header
+curl http://localhost:3000/user/profile -H "Authorization: Bearer <token>"
 ```
 
 ## Testing
@@ -67,9 +73,3 @@ curl http://localhost:3000/user/profile -H "x-user-id: <uuid>"
 ```bash
 bun test
 ```
-
-## Phase 2: Conflict & Alternatives
-
-When `POST /schedules` or `PATCH /schedules/:id` detects a conflict, the 409 response includes:
-
-- `alternativeSlots`: Suggested time slots that fit (with buffer respected)
