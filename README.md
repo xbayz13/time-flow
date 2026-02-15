@@ -1,88 +1,93 @@
-# Time Flow — AI-Powered Dynamic Time Blocker
+# Time Flow
 
-Backend API untuk manajemen jadwal berbasis Time Blocking dengan AI.
+AI-powered backend untuk Time Blocking — jadwal, konflik, burnout detection, dan optimasi lewat natural language.
 
-**Tech Stack:** Bun, ElysiaJS, Drizzle ORM, PostgreSQL
+**Stack:** Bun · ElysiaJS · Drizzle · PostgreSQL · OpenAI
 
-## Setup
+---
 
-### 1. Install dependencies
+## Quick Start
 
 ```bash
 bun install
-```
-
-### 2. Database
-
-Pastikan PostgreSQL berjalan, lalu:
-
-```bash
-# Copy env example
-cp .env.example .env
-
-# Edit .env:
-# DATABASE_URL=postgres://user:pass@localhost:5432/timeflow
-# OPENAI_API_KEY=... (untuk AI)
-# JWT_SECRET=... (min 32 karakter, untuk auth)
-
-# Push schema ke database
+cp .env.example .env   # isi DATABASE_URL, OPENAI_API_KEY, JWT_SECRET
 bun run db:push
-```
-
-### 3. Development
-
-```bash
 bun run dev
 ```
 
-Server berjalan di http://localhost:3000
+→ http://localhost:3000 | Docs: http://localhost:3000/openapi
 
+---
+
+## Setup
+
+| Langkah | Perintah |
+|---------|----------|
+| Install | `bun install` |
+| Env | `cp .env.example .env` → edit `DATABASE_URL`, `OPENAI_API_KEY`, `JWT_SECRET` |
+| DB | PostgreSQL aktif → `bun run db:push` |
+| Run | `bun run dev` |
+
+### Docker
 
 ```bash
-# Build dan jalankan dengan PostgreSQL
 docker compose up -d
-
-# App: http://localhost:3000
-# DB: localhost:5432 (user: postgres, pass: postgres, db: timeflow)
-
-# Atur env di .env atau export:
-# JWT_SECRET=... OPENAI_API_KEY=...
+# App: :3000 | DB: :5432 (postgres/postgres)
 ```
 
-## API
+---
 
-| Method | Endpoint | Deskripsi |
-|--------|----------|-----------|
-| GET | `/` | Info API |
-| POST | `/auth/register` | Daftar user (email + password) |
-| POST | `/auth/sign-in` | Login, dapat JWT token |
-| GET | `/user/profile` | Profil user *(auth)* |
-| PATCH | `/user/settings` | Update buffer, timezone *(auth)* |
-| GET | `/schedules?date=YYYY-MM-DD&analyze=true` | List jadwal (+ burnout/triage jika analyze=true) *(auth)* |
-| GET | `/schedules/audit?limit=50` | Audit log perubahan (AI vs USER) untuk undo *(auth)* |
-| POST | `/schedules` | Tambah jadwal *(auth)* |
-| PATCH | `/schedules/:id` | Update jadwal *(auth)* |
-| DELETE | `/schedules/:id` | Hapus jadwal *(auth)* |
-| GET | `/openapi` | Dokumentasi API (Scalar UI) |
+## API (Ringkas)
 
-### Auth (JWT)
+| Endpoint | Deskripsi |
+|----------|-----------|
+| `POST /auth/register` | Daftar (email + password) |
+| `POST /auth/sign-in` | Login, dapat JWT |
+| `GET /user/profile` | Profil *(auth)* |
+| `PATCH /user/settings` | Buffer, timezone *(auth)* |
+| `GET /schedules?date=&analyze=` | List jadwal, burnout, triage *(auth)* |
+| `GET /schedules/audit` | Audit log AI vs USER *(auth)* |
+| `POST/PATCH/DELETE /schedules` | CRUD jadwal *(auth)* |
+| `POST /ai/prompt` | Parse teks → draft jadwal *(auth)* |
+| `POST /ai/optimize` | Optimasi jadwal harian *(auth)* |
+| `POST /ai/confirm` | Simpan draft AI ke DB *(auth)* |
+
+Dokumentasi lengkap: **GET /openapi**
+
+---
+
+## Auth (JWT)
 
 ```bash
-# 1. Register (dengan password)
+# Register
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 
-# 2. Sign in
+# Sign in → ambil token
 curl -X POST http://localhost:3000/auth/sign-in \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 
-# 3. Gunakan token di header
-curl http://localhost:3000/user/profile -H "Authorization: Bearer <token>"
+# Panggil API dengan token
+curl -H "Authorization: Bearer <token>" http://localhost:3000/user/profile
 ```
 
-## Testing
+---
+
+## Fitur
+
+- **Conflict Detection** — tolak jadwal bentrok, saran slot alternatif
+- **Buffer** — jeda otomatis antar aktivitas
+- **AI NLP** — "Besok meeting jam 2" → draft jadwal
+- **Burnout Detection** — peringatan kerja >3 jam tanpa istirahat
+- **Triage** — saran pindah tugas saat hari overload
+- **Audit Trail** — log perubahan AI vs USER
+- **Rate Limit** — max 10 AI requests/menit per user
+
+---
+
+## Test
 
 ```bash
 bun test
