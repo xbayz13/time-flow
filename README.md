@@ -73,3 +73,5 @@ curl http://localhost:3000/user/profile -H "Authorization: Bearer <token>"
 ```bash
 bun test
 ```
+
+**Phase 3 tests:** Unit tests (schema, system prompt) + integration tests (auth guards, /ai/prompt, /ai/confirm). Integration tests require DB — they skip if DB is unavailable.

@@ -3,7 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { Output } from "ai";
 
-const aiResponseSchema = z.object({
+export const aiResponseSchema = z.object({
   action: z.enum(["DRAFT_CREATED", "OPTIMIZATION_SUGGESTED", "TRIAGE_REQUIRED"]),
   summary: z.string(),
   data: z.object({
@@ -44,7 +44,7 @@ export interface ScheduleContext {
   category: string;
 }
 
-function buildSystemPrompt(
+export function buildSystemPrompt(
   currentTime: string,
   userBuffer: number,
   sleepStart: string,
