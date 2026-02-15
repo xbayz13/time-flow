@@ -12,7 +12,7 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
       const date = query.date ?? new Date().toISOString().slice(0, 10);
       const items = await ScheduleService.getByDate(user.id, date);
 
-      return items.map((a) => ({
+      const result = items.map((a) => ({
         id: a.id,
         title: a.title,
         isFixed: a.isFixed,
@@ -23,10 +23,26 @@ export const scheduleModule = new Elysia({ prefix: "/schedules" })
         status: a.status,
         aiReasoning: a.aiReasoning,
       }));
+
+      if (query.analyze === "true") {
+        const analysis = ScheduleService.analyzeSchedule(
+          items,
+          user.bufferMinutes,
+          date
+        );
+        return {
+          schedules: result,
+          burnoutWarnings: analysis.burnoutWarnings,
+          triage: analysis.triage,
+        };
+      }
+
+      return result;
     },
     {
       query: t.Object({
         date: t.Optional(t.String()),
+        analyze: t.Optional(t.String()),
       }),
     }
   )

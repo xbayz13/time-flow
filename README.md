@@ -46,7 +46,7 @@ Server berjalan di http://localhost:3000
 | POST | `/auth/sign-in` | Login, dapat JWT token |
 | GET | `/user/profile` | Profil user *(auth)* |
 | PATCH | `/user/settings` | Update buffer, timezone *(auth)* |
-| GET | `/schedules?date=YYYY-MM-DD` | List jadwal *(auth)* |
+| GET | `/schedules?date=YYYY-MM-DD&analyze=true` | List jadwal (+ burnout/triage jika analyze=true) *(auth)* |
 | POST | `/schedules` | Tambah jadwal *(auth)* |
 | PATCH | `/schedules/:id` | Update jadwal *(auth)* |
 | DELETE | `/schedules/:id` | Hapus jadwal *(auth)* |
@@ -74,4 +74,15 @@ curl http://localhost:3000/user/profile -H "Authorization: Bearer <token>"
 bun test
 ```
 
-**Phase 3 tests:** Unit tests (schema, system prompt) + integration tests (auth guards, /ai/prompt, /ai/confirm). Integration tests require DB — they skip if DB is unavailable.
+**Phase 3 tests:** Unit tests (schema, system prompt) + integration tests (auth guards, /ai/prompt, /ai/confirm).
+
+**Phase 4 tests:** BurnoutDetector, TriageAnalyzer.
+
+Integration tests require DB — they skip if DB is unavailable.
+
+## Phase 4: Optimization & Mental Health
+
+- **Burnout Detection:** Deteksi >3 jam kerja berturut-turut tanpa jeda, saran "Rest Block"
+- **Triage Protocol:** Deteksi hari overload, saran pindah tugas prioritas rendah ke esok
+- **GET /schedules?analyze=true:** Mengembalikan `burnoutWarnings` dan `triage`
+- **Dynamic Buffer:** AI dapat kurangi buffer (min 5 menit) untuk menyelamatkan jadwal

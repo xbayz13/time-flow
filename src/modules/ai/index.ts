@@ -30,12 +30,24 @@ export const aiModule = new Elysia({ prefix: "/ai" })
         category: a.category,
       }));
 
+      const analysis = ScheduleService.analyzeSchedule(
+        existing,
+        user.bufferMinutes,
+        dateStr
+      );
+      const analysisContext = {
+        burnoutWarnings: analysis.burnoutWarnings,
+        triageOverload: analysis.triage.isOverload,
+        triageSuggestion: analysis.triage.suggestion ?? undefined,
+      };
+
       try {
         const proposal = await AIService.processPrompt(body.prompt, {
           currentTime: new Date().toISOString(),
           bufferMinutes: user.bufferMinutes,
           sleepStart: user.sleepStart,
           existingSchedules: existingContext,
+          analysisContext,
         });
 
         // Validate AI output with ConflictManager (double-check)
@@ -180,7 +192,18 @@ export const aiModule = new Elysia({ prefix: "/ai" })
         category: a.category,
       }));
 
-      const prompt = `Optimize my schedule for ${dateStr}. Current schedule: ${JSON.stringify(existingContext)}. Rearrange flexible activities for better flow, protect fixed ones, ensure buffers.`;
+      const analysis = ScheduleService.analyzeSchedule(
+        existing,
+        user.bufferMinutes,
+        dateStr
+      );
+      const analysisContext = {
+        burnoutWarnings: analysis.burnoutWarnings,
+        triageOverload: analysis.triage.isOverload,
+        triageSuggestion: analysis.triage.suggestion ?? undefined,
+      };
+
+      const prompt = `Optimize my schedule for ${dateStr}. ONLY rearrange activities with is_fixed: false. Protect fixed activities. Current: ${JSON.stringify(existingContext)}. Insert Rest Blocks if burnout detected.`;
 
       try {
         const proposal = await AIService.processPrompt(prompt, {
@@ -188,6 +211,7 @@ export const aiModule = new Elysia({ prefix: "/ai" })
           bufferMinutes: user.bufferMinutes,
           sleepStart: user.sleepStart,
           existingSchedules: existingContext,
+          analysisContext,
         });
 
         return {

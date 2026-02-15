@@ -4,6 +4,8 @@ import { activities } from "../../../db/schema";
 import type { Activity, NewActivity } from "../../../db/schema";
 import { ConflictManager } from "../../utils/ConflictManager";
 import { AlternativeSlotFinder } from "../../utils/AlternativeSlotFinder";
+import { BurnoutDetector } from "../../utils/BurnoutDetector";
+import { TriageAnalyzer } from "../../utils/TriageAnalyzer";
 
 export abstract class ScheduleService {
   static async getByDate(userId: string, date: string): Promise<Activity[]> {
@@ -82,6 +84,43 @@ export abstract class ScheduleService {
       dayStart,
       dayEnd
     );
+  }
+
+  static analyzeSchedule(
+    activities: Activity[],
+    bufferMinutes: number,
+    date: string
+  ) {
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+
+    const burnoutWarnings = BurnoutDetector.detect(
+      activities.map((a) => ({
+        startTime: new Date(a.startTime),
+        endTime: new Date(a.endTime),
+        category: a.category,
+        title: a.title,
+      })),
+      bufferMinutes
+    );
+
+    const triageResult = TriageAnalyzer.analyze(
+      activities.map((a) => ({
+        startTime: new Date(a.startTime),
+        endTime: new Date(a.endTime),
+        isFixed: a.isFixed,
+        priority: a.priority,
+        title: a.title,
+      })),
+      bufferMinutes,
+      dayStart,
+      dayEnd
+    );
+
+    return {
+      burnoutWarnings,
+      triage: triageResult,
+    };
   }
 
   static checkConflict(
