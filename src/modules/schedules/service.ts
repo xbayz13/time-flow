@@ -6,11 +6,15 @@ import { ConflictManager } from "../../utils/ConflictManager";
 import { AlternativeSlotFinder } from "../../utils/AlternativeSlotFinder";
 import { BurnoutDetector } from "../../utils/BurnoutDetector";
 import { TriageAnalyzer } from "../../utils/TriageAnalyzer";
+import { getDayBoundsInTimezone } from "../../utils/timezone";
 
 export abstract class ScheduleService {
-  static async getByDate(userId: string, date: string): Promise<Activity[]> {
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+  static async getByDate(
+    userId: string,
+    date: string,
+    timezone?: string | null
+  ): Promise<Activity[]> {
+    const { dayStart, dayEnd } = getDayBoundsInTimezone(date, timezone);
 
     return db
       .select()
@@ -66,10 +70,10 @@ export abstract class ScheduleService {
     existing: Activity[],
     requiredDurationMinutes: number,
     bufferMinutes: number,
-    date: string
+    date: string,
+    timezone?: string | null
   ) {
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+    const { dayStart, dayEnd } = getDayBoundsInTimezone(date, timezone);
 
     const slots = existing.map((a) => ({
       startTime: new Date(a.startTime),
@@ -89,10 +93,10 @@ export abstract class ScheduleService {
   static analyzeSchedule(
     activities: Activity[],
     bufferMinutes: number,
-    date: string
+    date: string,
+    timezone?: string | null
   ) {
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+    const { dayStart, dayEnd } = getDayBoundsInTimezone(date, timezone);
 
     const burnoutWarnings = BurnoutDetector.detect(
       activities.map((a) => ({

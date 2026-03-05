@@ -55,8 +55,10 @@ export function buildSystemPrompt(
   userBuffer: number,
   sleepStart: string,
   existingSchedules: ScheduleContext[],
-  analysisContext?: AnalysisContext
+  analysisContext?: AnalysisContext,
+  userTimezone?: string
 ): string {
+  const tz = userTimezone && userTimezone.trim() ? userTimezone : "Asia/Jakarta";
   let analysisSection = "";
   if (analysisContext?.burnoutWarnings?.length) {
     analysisSection += `\n# BURNOUT ALERTS (Backend detected)\n${analysisContext.burnoutWarnings.map((w) => `- ${w.suggestion}`).join("\n")}`;
@@ -76,12 +78,13 @@ Anda adalah "Dynamic Buffer Engine", asisten manajemen waktu yang empatik, proak
 
 # INPUT CONTEXT
 - current_time: ${currentTime} (UTC)
+- user_timezone: ${tz} (CRITICAL: Anggap SELALU bahwa jam yang user sebut = waktu lokal di timezone ini. Contoh: "Tambah meeting pukul 14:00 selama 1 jam" → 14:00 sudah di ${tz}, bukan UTC. Convert ke UTC untuk output.)
 - user_buffer: ${userBuffer} menit (Dynamic Buffer: Anda boleh kurangi sampai minimal 5 menit untuk menyelamatkan jadwal penting)
 - user_sleep_start: ${sleepStart} (Berikan peringatan jika ada kegiatan di waktu tidur)
 - existing_schedules: ${JSON.stringify(existingSchedules)}${analysisSection}
 
 # OPERATIONAL RULES
-1. **Normalization**: Ubah input bahasa alami (misal: "nanti sore", "besok jam 10") menjadi format ISO-8601 UTC.
+1. **Normalization (PENTING)**: Setiap jam dari user prompt = waktu lokal di ${tz}. Contoh: "meeting pukul 14:00" = 14:00 ${tz}. Asia/Jakarta = UTC+7 → 14:00 Jakarta = 07:00 UTC. Output HARUS dalam UTC: "YYYY-MM-DDT07:00:00.000Z". Jangan append Z ke waktu lokal—convert dulu ke UTC.
 2. **Buffer Policy**: Default ${userBuffer} menit antar kegiatan. Untuk deep_work minimal 15 menit. Dynamic Buffer: kurangi buffer (min 5 menit) jika perlu menyelamatkan jadwal penting.
 3. **Conflict Resolution**: Jika menabrak FIXED: cari slot kosong. Jika menabrak FLEXIBLE: geser jadwal fleksibel.
 4. **Triage Logic**: Jika hari penuh, gunakan action TRIAGE_REQUIRED dan sarankan pindahkan tugas prioritas rendah ke esok.
@@ -100,6 +103,7 @@ export abstract class AIService {
       sleepStart: string;
       existingSchedules: ScheduleContext[];
       analysisContext?: AnalysisContext;
+      userTimezone?: string;
     }
   ): Promise<AIProposal> {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -112,7 +116,8 @@ export abstract class AIService {
       context.bufferMinutes,
       context.sleepStart,
       context.existingSchedules,
-      context.analysisContext
+      context.analysisContext,
+      context.userTimezone
     );
 
     const { output } = await generateText({

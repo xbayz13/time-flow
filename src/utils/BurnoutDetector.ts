@@ -1,4 +1,11 @@
-import { addMinutes, differenceInMinutes } from "date-fns";
+import { differenceInMinutes } from "date-fns";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
+
+/** Format date untuk tampilan manusia, mis: "16 Feb 2025, 14:30" */
+function formatForHuman(d: Date): string {
+  return format(d, "d MMM yyyy, HH:mm", { locale: id });
+}
 
 export interface ActivitySlot {
   startTime: Date;
@@ -56,7 +63,7 @@ export class BurnoutDetector {
                 start: workStart.toISOString(),
                 end: workEnd!.toISOString(),
                 continuousMinutes: duration,
-                suggestion: `Sisipkan "Short Break" atau "Stretch Break" setelah ${workEnd!.toISOString()}`,
+                suggestion: `Sisipkan "Short Break" atau "Stretch Break" setelah ${formatForHuman(workEnd!)}`,
               });
             }
             workStart = start;
@@ -73,7 +80,7 @@ export class BurnoutDetector {
             start: workStart!.toISOString(),
             end: workEnd!.toISOString(),
             continuousMinutes: duration,
-            suggestion: `Sisipkan "Short Break" setelah ${workEnd!.toISOString()}`,
+            suggestion: `Sisipkan "Short Break" setelah ${formatForHuman(workEnd!)}`,
           });
         }
         workStart = null;
@@ -88,7 +95,7 @@ export class BurnoutDetector {
           start: workStart.toISOString(),
           end: workEnd.toISOString(),
           continuousMinutes: duration,
-          suggestion: `Sisipkan "Short Break" setelah ${workEnd.toISOString()}`,
+          suggestion: `Sisipkan "Short Break" setelah ${formatForHuman(workEnd)}`,
         });
       }
     }

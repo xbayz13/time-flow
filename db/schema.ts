@@ -19,6 +19,10 @@ export const users = pgTable("users", {
   bufferMinutes: integer("buffer_minutes").notNull().default(15),
   timezone: varchar("timezone", { length: 63 }).notNull().default("Asia/Jakarta"),
   sleepStart: varchar("sleep_start", { length: 5 }).notNull().default("22:00"),
+  /** Apakah user boleh mengakses API AI (prompt, optimize, confirm) */
+  aiAccessEnabled: boolean("ai_access_enabled").notNull().default(true),
+  /** null = akses permanen selamanya; else = batas akhir subscription */
+  aiAccessExpiresAt: timestamp("ai_access_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

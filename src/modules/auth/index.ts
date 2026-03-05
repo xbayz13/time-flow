@@ -1,10 +1,12 @@
 import { Elysia, t } from "elysia";
-import { jwt } from "@elysiajs/jwt";
 import { db } from "../../../db";
+import { jsonError, successObj } from "../../utils/response";
 import { users } from "../../../db/schema";
 import { eq } from "drizzle-orm";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-min-32-characters-long";
+/** Durasi trial AI (jam) untuk user baru. Default 12. Env: AI_TRIAL_HOURS */
+const AI_TRIAL_HOURS = Number(process.env.AI_TRIAL_HOURS) || 12;
 if (
   !process.env.JWT_SECRET &&
   (process.env.NODE_ENV === "production" || process.env.BUN_ENV === "production")
@@ -18,13 +20,6 @@ if (
  * Public auth routes: register, sign-in
  */
 export const authPublic = new Elysia({ prefix: "/auth" })
-  .use(
-    jwt({
-      name: "jwt",
-      secret: JWT_SECRET,
-      exp: "7d",
-    })
-  )
   .post(
     "/register",
     async ({ body, jwt: sign }) => {
@@ -34,10 +29,7 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         .where(eq(users.email, body.email));
 
       if (existing) {
-        return new Response(
-          JSON.stringify({ error: "Email already registered" }),
-          { status: 400 }
-        );
+        return jsonError(400, "Email sudah terdaftar", undefined, undefined, "BAD_REQUEST");
       }
 
       const passwordHash = await Bun.password.hash(body.password, {
@@ -52,6 +44,8 @@ export const authPublic = new Elysia({ prefix: "/auth" })
           passwordHash,
           bufferMinutes: body.bufferMinutes ?? 15,
           timezone: body.timezone ?? "Asia/Jakarta",
+          aiAccessEnabled: true,
+          aiAccessExpiresAt: new Date(Date.now() + AI_TRIAL_HOURS * 60 * 60 * 1000),
         })
         .returning();
 
@@ -60,12 +54,10 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         email: user!.email,
       });
 
-      return {
-        id: user!.id,
-        email: user!.email,
-        token,
-        message: "Use Authorization: Bearer <token> for API calls",
-      };
+      return successObj(
+        { id: user!.id, email: user!.email, token },
+        "Registrasi berhasil"
+      );
     },
     {
       body: t.Object({
@@ -90,21 +82,13 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         .where(eq(users.email, body.email));
 
       if (!user || !user.passwordHash) {
-        return new Response(
-          JSON.stringify({ error: "Invalid email or password" }),
-          { status: 401 }
-        );
+        return jsonError(401, "Email atau password salah", undefined, undefined, "UNAUTHORIZED");
       }
 
-      const valid = await Bun.password.verify(body.password, user.passwordHash, {
-        algorithm: "bcrypt",
-      });
+      const valid = await Bun.password.verify(body.password, user.passwordHash, "bcrypt");
 
       if (!valid) {
-        return new Response(
-          JSON.stringify({ error: "Invalid email or password" }),
-          { status: 401 }
-        );
+        return jsonError(401, "Email atau password salah", undefined, undefined, "UNAUTHORIZED");
       }
 
       const token = await sign.sign({
@@ -112,11 +96,10 @@ export const authPublic = new Elysia({ prefix: "/auth" })
         email: user.email,
       });
 
-      return {
-        id: user.id,
-        email: user.email,
-        token,
-      };
+      return successObj(
+        { id: user.id, email: user.email, token },
+        "Login berhasil"
+      );
     },
     {
       body: t.Object({
@@ -131,17 +114,15 @@ export const authPublic = new Elysia({ prefix: "/auth" })
     }
   );
 
-/**
- * Auth plugin: verifies JWT from Authorization Bearer header
- */
-export const authPlugin = new Elysia({ name: "auth" })
-  .use(
-    jwt({
-      name: "jwt",
-      secret: JWT_SECRET,
-    })
-  )
-  .derive(async ({ request, jwt: verify }) => {
+/** Auth derive + onBeforeHandle - export untuk dipakai di app level */
+export const authGuard = {
+  derive: async (ctx: { request: Request; jwt: { verify: (t: string) => Promise<unknown> | false } }) => {
+    const { request, jwt: verify } = ctx;
+    const path = new URL(request.url).pathname;
+    const isPublic = path === "/" || path.startsWith("/auth") || path.startsWith("/docs");
+    if (isPublic) {
+      return { user: null as AuthUser | null, authError: null as Response | null };
+    }
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7)
@@ -149,46 +130,39 @@ export const authPlugin = new Elysia({ name: "auth" })
 
     if (!token) {
       return {
-        user: null as {
-          id: string;
-          email: string;
-          bufferMinutes: number;
-          timezone: string;
-          sleepStart: string;
-        } | null,
-        authError: new Response(
-          JSON.stringify({
-            error: "Unauthorized: missing Authorization Bearer token",
-          }),
-          { status: 401, headers: { "Content-Type": "application/json" } }
-        ),
+        user: null as AuthUser,
+        authError: jsonError(401, "Token tidak ditemukan", "Sertakan Authorization: Bearer <token>", undefined, "UNAUTHORIZED"),
       };
     }
 
-    const payload = await verify.verify(token);
+    let payload: { sub?: string; email?: string } | null = null;
+    try {
+      payload = (await verify.verify(token)) as { sub?: string; email?: string } | null;
+    } catch (err) {
+      console.warn("[auth] JWT verify failed:", err instanceof Error ? err.message : err);
+      return {
+        user: null,
+        authError: jsonError(401, "Token tidak valid atau sudah kadaluarsa", undefined, undefined, "UNAUTHORIZED"),
+      };
+    }
 
     if (!payload || !payload.sub) {
       return {
         user: null,
-        authError: new Response(
-          JSON.stringify({ error: "Invalid or expired token" }),
-          { status: 401, headers: { "Content-Type": "application/json" } }
-        ),
+        authError: jsonError(401, "Token tidak valid atau sudah kadaluarsa", undefined, undefined, "UNAUTHORIZED"),
       };
     }
 
+    const sub = String(payload.sub);
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.id, payload.sub as string));
+      .where(eq(users.id, sub));
 
     if (!user) {
       return {
         user: null,
-        authError: new Response(
-          JSON.stringify({ error: "User not found" }),
-          { status: 401, headers: { "Content-Type": "application/json" } }
-        ),
+        authError: jsonError(401, "User tidak ditemukan", undefined, undefined, "NOT_FOUND"),
       };
     }
 
@@ -199,18 +173,32 @@ export const authPlugin = new Elysia({ name: "auth" })
         bufferMinutes: user.bufferMinutes,
         timezone: user.timezone,
         sleepStart: user.sleepStart,
+        aiAccessEnabled: user.aiAccessEnabled,
+        aiAccessExpiresAt: user.aiAccessExpiresAt,
       },
       authError: null as Response | null,
     };
-  })
-  .onBeforeHandle(({ authError }) => {
+  },
+  onBeforeHandle: (ctx: { request: Request; authError: Response | null; user: { id: string } | null }) => {
+    const { request, authError, user } = ctx;
     if (authError) return authError;
-  })
-  .onBeforeHandle(({ user }) => {
+    const path = new URL(request.url).pathname;
+    const isPublic = path === "/" || path.startsWith("/auth") || path.startsWith("/docs");
+    if (isPublic) return;
     if (!user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
+      return jsonError(401, "Unauthorized", undefined, undefined, "UNAUTHORIZED");
     }
-  });
+  },
+};
+
+/** Type for authenticated user - use in handler params when app-level derive provides it */
+export type AuthUser = {
+  id: string;
+  email: string;
+  bufferMinutes: number;
+  timezone: string;
+  sleepStart: string;
+  aiAccessEnabled: boolean;
+  aiAccessExpiresAt: Date | null;
+} | null;
+

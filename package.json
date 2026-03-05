@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.29",
+    "@elysiajs/cors": "^1.4.1",
     "@elysiajs/jwt": "^1.4.0",
     "@elysiajs/openapi": "^1.4.14",
     "ai": "^6.0.86",
     "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.1",
     "elysia": "latest",
     "postgres": "^3.4.8",

@@ -1,11 +1,16 @@
 import { Elysia, t } from "elysia";
-import { authPlugin } from "../auth";
+import { errorObj, successObj } from "../../utils/response";
+import { getDateInTimezone, parseInputAsUserTz, toUserTzISO } from "../../utils/timezone";
+import { checkAIAccess } from "../../utils/aiAccess";
 import { AIService } from "./service";
 import { aiModels } from "./model";
 import { ScheduleService } from "../schedules/service";
 import { ConflictManager } from "../../utils/ConflictManager";
 import { AuditService } from "../../utils/AuditService";
 import { checkAIRateLimit } from "../../utils/RateLimiter";
+import type { AuthUser } from "../auth";
+
+type AuthContext = { user: AuthUser };
 
 export const aiModule = new Elysia({
   prefix: "/ai",
@@ -14,34 +19,46 @@ export const aiModule = new Elysia({
     security: [{ bearerAuth: [] }],
   },
 })
-  .use(authPlugin)
   .model(aiModels)
   .post(
     "/prompt",
-    async ({ user, body, set }) => {
+    async (ctx) => {
+      const { user, body, set } = ctx as typeof ctx & AuthContext;
       if (!user) {
         set.status = 401;
-        return { error: "Unauthorized" };
+        return errorObj("Unauthorized", undefined, undefined, "UNAUTHORIZED");
+      }
+      const access = checkAIAccess(user);
+      if (!access.ok) {
+        set.status = 403;
+        return errorObj(
+          "Akses AI ditolak",
+          access.message,
+          access.reason === "EXPIRED" ? { expiresAt: access.expiresAt } : undefined,
+          "AI_ACCESS_DENIED"
+        );
       }
       const limit = checkAIRateLimit(user.id, 10, 60_000);
       if (!limit.ok) {
         set.status = 429;
-        return {
-          error: "AI rate limit exceeded",
-          message: "Max 10 AI requests per minute. Try again later.",
-          retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000),
-        };
+        return errorObj(
+          "Limit AI tercapai",
+          "Maksimal 10 permintaan AI per menit. Coba lagi nanti.",
+          { retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000) },
+          "RATE_LIMITED"
+        );
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         set.status = 500;
-        return { error: "OpenAI API key not configured" };
+        return errorObj("OpenAI API key belum dikonfigurasi", undefined, undefined, "SERVER_ERROR");
       }
 
+      const tz = user.timezone ?? "Asia/Jakarta";
       const dateStr =
-        body.date ?? new Date().toISOString().slice(0, 10);
-      const existing = await ScheduleService.getByDate(user.id, dateStr);
+        body.date ?? getDateInTimezone(new Date(), tz);
+      const existing = await ScheduleService.getByDate(user.id, dateStr, tz);
 
       const existingContext = existing.map((a) => ({
         title: a.title,
@@ -55,7 +72,8 @@ export const aiModule = new Elysia({
       const analysis = ScheduleService.analyzeSchedule(
         existing,
         user.bufferMinutes,
-        dateStr
+        dateStr,
+        tz
       );
       const analysisContext = {
         burnoutWarnings: analysis.burnoutWarnings,
@@ -70,6 +88,7 @@ export const aiModule = new Elysia({
           sleepStart: user.sleepStart,
           existingSchedules: existingContext,
           analysisContext,
+          userTimezone: tz,
         });
 
         // Validate AI output with ConflictManager (double-check)
@@ -95,30 +114,50 @@ export const aiModule = new Elysia({
           );
 
           if (validation.hasFixedConflict) {
+            const slots = ScheduleService.findAlternativeSlots(
+              existing,
+              Math.round((endTime.getTime() - startTime.getTime()) / 60000),
+              user.bufferMinutes,
+              dateStr,
+              tz
+            );
             set.status = 400;
-            return {
-              error: "AI suggested a slot that conflicts with fixed schedule",
-              action: "FIND_ALTERNATIVES",
-              alternativeSlots: ScheduleService.findAlternativeSlots(
-                existing,
-                Math.round((endTime.getTime() - startTime.getTime()) / 60000),
-                user.bufferMinutes,
-                dateStr
-              ),
-            };
+            return errorObj(
+              "Slot bentrok dengan jadwal tetap",
+              "AI menyarankan waktu yang bertabrakan dengan jadwal tetap",
+              {
+                action: "FIND_ALTERNATIVES",
+                alternativeSlots: slots.map((s) => ({
+                  start: toUserTzISO(new Date(s.start), tz),
+                  end: toUserTzISO(new Date(s.end), tz),
+                  durationMinutes: s.durationMinutes,
+                })),
+              },
+              "VALIDATION_ERROR"
+            );
           }
         }
 
-        return {
+        const enrichedProposal = {
           ...proposal,
+          data: {
+            ...proposal.data,
+            new_activities: proposal.data.new_activities.map((a) => ({
+              ...a,
+              start: toUserTzISO(new Date(a.start), tz),
+              end: toUserTzISO(new Date(a.end), tz),
+            })),
+          },
           status: "PENDING_CONFIRMATION",
         };
+
+        return successObj(
+          enrichedProposal,
+          "Jadwal berhasil digenerate"
+        );
       } catch (err) {
         set.status = 500;
-        return {
-          error: "AI processing failed",
-          message: (err as Error).message,
-        };
+        return errorObj("AI gagal memproses", (err as Error).message, undefined, "SERVER_ERROR");
       }
     },
     {
@@ -132,32 +171,48 @@ export const aiModule = new Elysia({
   )
   .post(
     "/confirm",
-    async ({ user, body, set }) => {
+    async (ctx) => {
+      const { user, body, set } = ctx as typeof ctx & AuthContext;
+      if (!user) {
+        set.status = 401;
+        return errorObj("Unauthorized", undefined, undefined, "UNAUTHORIZED");
+      }
+      const access = checkAIAccess(user);
+      if (!access.ok) {
+        set.status = 403;
+        return errorObj(
+          "Akses AI ditolak",
+          access.message,
+          access.reason === "EXPIRED" ? { expiresAt: access.expiresAt } : undefined,
+          "AI_ACCESS_DENIED"
+        );
+      }
       if (!body.activities?.length) {
         set.status = 400;
-        return { error: "No activities to confirm" };
+        return errorObj("Tidak ada aktivitas untuk dikonfirmasi", undefined, undefined, "BAD_REQUEST");
       }
 
       const created: Array<{
         id: string;
         title: string;
-        startTime: Date;
-        endTime: Date;
+        startTime: string;
+        endTime: string;
         category: string;
       }> = [];
+
+      const tz = user.timezone ?? "Asia/Jakarta";
 
       for (const act of body.activities) {
         const startTimeStr = act.startTime ?? act.start;
         const endTimeStr = act.endTime ?? act.end;
         if (!startTimeStr || !endTimeStr) {
           set.status = 400;
-          return { error: "Each activity must have startTime/start and endTime/end" };
+          return errorObj("Setiap aktivitas harus memiliki startTime dan endTime", undefined, undefined, "VALIDATION_ERROR");
         }
-        const startTime = new Date(startTimeStr);
-        const endTime = new Date(endTimeStr);
-
-        const dateStr = startTime.toISOString().slice(0, 10);
-        const existing = await ScheduleService.getByDate(user.id, dateStr);
+        const startTime = parseInputAsUserTz(startTimeStr, tz);
+        const endTime = parseInputAsUserTz(endTimeStr, tz);
+        const dateStr = getDateInTimezone(startTime, tz);
+        const existing = await ScheduleService.getByDate(user.id, dateStr, tz);
         const conflict = ScheduleService.checkConflict(
           {
             title: act.title,
@@ -171,10 +226,14 @@ export const aiModule = new Elysia({
 
         if (conflict.hasConflict) {
           set.status = 409;
-          return {
-            error: "Cannot confirm: schedule conflict detected",
-            conflicts: conflict.conflicts,
-          };
+          return errorObj("Tidak bisa mengonfirmasi: konflik jadwal terdeteksi", undefined, {
+            conflicts: conflict.conflicts.map((c) => ({
+              title: c.title,
+              startTime: toUserTzISO(c.startTime, tz),
+              endTime: toUserTzISO(c.endTime, tz),
+              isFixed: c.isFixed,
+            })),
+          }, "CONFLICT");
         }
 
         const c = await ScheduleService.create({
@@ -202,16 +261,19 @@ export const aiModule = new Elysia({
         created.push({
           id: c.id,
           title: c.title,
-          startTime: c.startTime,
-          endTime: c.endTime,
+          startTime: toUserTzISO(c.startTime, tz),
+          endTime: toUserTzISO(c.endTime, tz),
           category: c.category,
         });
       }
 
-      return {
-        summary: `Confirmed ${created.length} activity/activities`,
-        created,
-      };
+      return successObj(
+        {
+          summary: `Confirmed ${created.length} activity/activities`,
+          created,
+        },
+        `${created.length} jadwal berhasil disimpan`
+      );
     },
     {
       body: "confirmBody",
@@ -224,30 +286,43 @@ export const aiModule = new Elysia({
   )
   .post(
     "/optimize",
-    async ({ user, body, set }) => {
+    async (ctx) => {
+      const { user, body, set } = ctx as typeof ctx & AuthContext;
       if (!user) {
         set.status = 401;
-        return { error: "Unauthorized" };
+        return errorObj("Unauthorized", undefined, undefined, "UNAUTHORIZED");
+      }
+      const access = checkAIAccess(user);
+      if (!access.ok) {
+        set.status = 403;
+        return errorObj(
+          "Akses AI ditolak",
+          access.message,
+          access.reason === "EXPIRED" ? { expiresAt: access.expiresAt } : undefined,
+          "AI_ACCESS_DENIED"
+        );
       }
       const limit = checkAIRateLimit(user.id, 10, 60_000);
       if (!limit.ok) {
         set.status = 429;
-        return {
-          error: "AI rate limit exceeded",
-          message: "Max 10 AI requests per minute. Try again later.",
-          retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000),
-        };
+        return errorObj(
+          "Limit AI tercapai",
+          "Maksimal 10 permintaan AI per menit. Coba lagi nanti.",
+          { retryAfter: Math.ceil((limit.resetAt - Date.now()) / 1000) },
+          "RATE_LIMITED"
+        );
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         set.status = 500;
-        return { error: "OpenAI API key not configured" };
+        return errorObj("OpenAI API key belum dikonfigurasi", undefined, undefined, "SERVER_ERROR");
       }
 
+      const tz = user.timezone ?? "Asia/Jakarta";
       const dateStr =
-        body?.date ?? new Date().toISOString().slice(0, 10);
-      const existing = await ScheduleService.getByDate(user.id, dateStr);
+        body?.date ?? getDateInTimezone(new Date(), tz);
+      const existing = await ScheduleService.getByDate(user.id, dateStr, tz);
 
       const existingContext = existing.map((a) => ({
         title: a.title,
@@ -261,7 +336,8 @@ export const aiModule = new Elysia({
       const analysis = ScheduleService.analyzeSchedule(
         existing,
         user.bufferMinutes,
-        dateStr
+        dateStr,
+        tz
       );
       const analysisContext = {
         burnoutWarnings: analysis.burnoutWarnings,
@@ -278,18 +354,34 @@ export const aiModule = new Elysia({
           sleepStart: user.sleepStart,
           existingSchedules: existingContext,
           analysisContext,
+          userTimezone: tz,
         });
 
-        return {
+        const enrichedProposal = {
           ...proposal,
+          data: {
+            ...proposal.data,
+            new_activities: (proposal.data.new_activities ?? []).map((a) => ({
+              ...a,
+              start: toUserTzISO(new Date(a.start), tz),
+              end: toUserTzISO(new Date(a.end), tz),
+            })),
+            shifted_activities: (proposal.data.shifted_activities ?? []).map((a) => ({
+              ...a,
+              start: toUserTzISO(new Date(a.start), tz),
+              end: toUserTzISO(new Date(a.end), tz),
+            })),
+          },
           status: "PENDING_CONFIRMATION",
         };
+
+        return successObj(
+          enrichedProposal,
+          "Jadwal berhasil dioptimasi"
+        );
       } catch (err) {
         set.status = 500;
-        return {
-          error: "AI optimization failed",
-          message: (err as Error).message,
-        };
+        return errorObj("Optimasi AI gagal", (err as Error).message, undefined, "SERVER_ERROR");
       }
     },
     {

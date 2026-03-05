@@ -1,9 +1,20 @@
 import { Elysia } from "elysia";
+import { jwt } from "@elysiajs/jwt";
+import { successObj } from "./utils/response";
 import { openapi } from "@elysiajs/openapi";
-import { authPublic } from "./modules/auth";
+import { authPublic, authGuard } from "./modules/auth";
 import { userModule } from "./modules/user";
 import { scheduleModule } from "./modules/schedules";
 import { aiModule } from "./modules/ai";
+
+const corsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin ?? "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Max-Age": "86400",
+  "Referrer-Policy": "no-referrer",
+});
 
 const app = new Elysia()
   .use(
@@ -39,11 +50,12 @@ const app = new Elysia()
   )
   .get(
     "/",
-    () => ({
-      name: "Time Flow API",
-      version: "1.0",
-      docs: "See /docs for OpenAPI/Scalar documentation",
-    }),
+    () =>
+      successObj({
+        name: "Time Flow API",
+        version: "1.0",
+        docs: "See /docs for OpenAPI/Scalar documentation",
+      }),
     {
       detail: {
         summary: "API info",
@@ -52,12 +64,37 @@ const app = new Elysia()
       },
     }
   )
+  .use(jwt({ name: "jwt", secret: process.env.JWT_SECRET ?? "dev-secret-min-32-characters-long", exp: "7d" }))
   .use(authPublic)
+  .derive(authGuard.derive)
+  .onBeforeHandle(authGuard.onBeforeHandle)
   .use(userModule)
   .use(scheduleModule)
-  .use(aiModule)
-  .listen(3000);
+  .use(aiModule);
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+// CORS: Bun.serve manual karena app.compile() di listen() overwrite app.fetch
+app.compile();
+const elysiaFetch = app.fetch;
+
+const server = Bun.serve({
+  port: Number(process.env.PORT) || 3000,
+  fetch: async (request: Request) => {
+    const origin = request.headers.get("Origin");
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(origin),
+      });
+    }
+
+    const response = await elysiaFetch.call(app, request);
+    const headers = new Headers(response.headers);
+    Object.entries(corsHeaders(origin)).forEach(([k, v]) => headers.set(k, v));
+    return new Response(response.body, { status: response.status, headers });
+  },
+});
+
+app.server = server;
+
+console.log(`🦊 Elysia is running at ${server.hostname}:${server.port}`);
